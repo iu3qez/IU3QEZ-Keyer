@@ -1,0 +1,17 @@
+idf_component_register(
+    SRCS
+        "audio_subsystem.cpp"
+        "audio_stream_player.cpp"
+        "esp_codec_driver.cpp"
+        "sidetone_service.cpp"
+        "tone_generator.cpp"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        config
+        driver
+        freertos
+        esp_io_expander
+        espressif__esp_io_expander_tca95xx_16bit
+        espressif__esp_codec_dev
+)

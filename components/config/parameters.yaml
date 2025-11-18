@@ -1,0 +1,2309 @@
+# Parameter Metadata: Single Source of Truth
+# This YAML file defines all device configuration parameters for the IU3QEZ QRS2HST Keyer
+#
+# Auto-generates (via generate_parameters.py):
+#   - components/config/include/config/parameter_table.hpp (PARAMETER_TABLE macro for NVS storage)
+#   - components/config/parameter_registry_generated.cpp (RegisterAllParameters with lambdas)
+#
+# DO NOT manually edit generated files - they will be overwritten on build!
+#
+# YAML Structure Reference:
+# ========================
+#
+# parameters:
+#   - subsystem: <string>        # audio | keying | hardware | wifi | general
+#     name: <string>              # Parameter short name (e.g., "freq")
+#     nvs_key: <string>           # NVS storage key (max 15 chars, e.g., "audio_freq")
+#     field: <string>             # DeviceConfig field path (e.g., "audio.sidetone_frequency_hz")
+#     type: <enum>                # INT32 | UINT32 | UINT16 | UINT8 | INT8 | BOOL | STRING | FLOAT | ENUM
+#
+#     # Type-specific fields (depending on 'type'):
+#     min: <number>               # For numeric types (INT*, UINT*, FLOAT)
+#     max: <number>               # For numeric types
+#     enum_type: <string>         # For ENUM: C++ enum class name (e.g., "KeyingPreset")
+#     values:                     # For ENUM: array of allowed values
+#       - name: <string>          #   User-facing name (e.g., "V0")
+#         value: <string>         #   C++ enum constant (e.g., "kSuperKeyerBoth")
+#         description: <string>   #   Human-readable description
+#
+#     # Common metadata:
+#     reset_required: <boolean>   # true = changing requires device reboot
+#     description: <string>       # Short 1-line description
+#     unit: <string>              # Unit string (e.g., "Hz", "WPM", "%", "" for none)
+#     validator: <string>         # Validator tag (RangeValidator, StringValidator, etc.)
+#
+#     # Help text (NEW in Feature 4):
+#     help:
+#       short: <string>           # One-line help for console parameter lists
+#       long: <multiline>         # Detailed explanation (use | for multiline)
+#       examples:                 # Usage examples (copy-paste ready)
+#         - command: <string>
+#           description: <string>
+#
+#     # Advanced (optional):
+#     visibility_condition: <string>  # Lambda expression for conditional visibility (future use)
+#     widget_hint: <string>           # Web UI widget type override (future use)
+#
+# ========================
+
+parameters:
+  # ============================================================================
+  # GENERAL SUBSYSTEM - Station identification
+  # ============================================================================
+
+  - subsystem: general
+    name: callsign
+    nvs_key: general_call
+    field: general.callsign
+    type: STRING
+    min: 3
+    max: 15
+    reset_required: false
+    category: normal
+    description: "Station callsign"
+    unit: ""
+    validator: StringCallsignValidatorTag
+    help:
+      short: "Set station callsign (ITU format: A-Z, 0-9, /, -)"
+      long: |
+        Your amateur radio callsign used for station identification.
+
+        Valid characters: uppercase letters (A-Z), digits (0-9),
+        forward slash (/), and hyphen (-).
+
+        Examples: IU3QEZ, N0CALL, VE3/W1ABC, F/ON4ABC
+
+        This callsign is transmitted in CW beacon mode and displayed
+        on the Web UI for remote identification.
+      examples:
+        - command: "general callsign IU3QEZ"
+          description: "Set callsign to IU3QEZ"
+        - command: "general callsign N0CALL"
+          description: "Set callsign to N0CALL"
+
+  # ============================================================================
+  # AUDIO SUBSYSTEM - Sidetone generation and control
+  # ============================================================================
+
+  - subsystem: audio
+    name: freq
+    nvs_key: audio_freq
+    field: audio.sidetone_frequency_hz
+    type: UINT16
+    min: 100
+    max: 2000
+    reset_required: false
+    category: normal
+    description: "Sidetone frequency"
+    unit: "Hz"
+    validator: RangeValidatorTag
+    help:
+      short: "Set sidetone frequency in Hz"
+      long: |
+        Controls the pitch of the audio sidetone heard when keying.
+
+        Lower values (100-400 Hz) provide a deeper tone suitable for
+        noisy environments. Higher values (700-2000 Hz) are easier to
+        hear and reduce ear fatigue during long sessions.
+
+        Default: 700 Hz
+        Recommended range: 500-900 Hz for most operators
+      examples:
+        - command: "audio freq 700"
+          description: "Set to default 700 Hz"
+        - command: "audio freq 550"
+          description: "Lower frequency for noisy conditions"
+        - command: "audio freq 850"
+          description: "Higher frequency for clarity"
+
+  - subsystem: audio
+    name: volume
+    nvs_key: audio_vol
+    field: audio.sidetone_volume_percent
+    type: UINT8
+    min: 0
+    max: 100
+    reset_required: false
+    category: normal
+    description: "Sidetone volume"
+    unit: "%"
+    validator: RangeValidatorTag
+    help:
+      short: "Set sidetone volume (0-100%)"
+      long: |
+        Controls the output volume of the sidetone audio.
+
+        0% = silent (sidetone muted)
+        100% = maximum volume
+
+        Start with a moderate volume (50-70%) and adjust to
+        your comfort level. Excessive volume can cause ear fatigue.
+
+        Default: 50%
+      examples:
+        - command: "audio volume 50"
+          description: "Set to default 50% volume"
+        - command: "audio volume 75"
+          description: "Increase to 75% for loud environments"
+        - command: "audio volume 0"
+          description: "Mute sidetone completely"
+
+  - subsystem: audio
+    name: fade_in
+    nvs_key: audio_fadein
+    field: audio.sidetone_fade_in_ms
+    type: UINT16
+    min: 0
+    max: 100
+    reset_required: false
+    category: normal
+    description: "Sidetone fade-in time"
+    unit: "ms"
+    validator: RangeValidatorTag
+    help:
+      short: "Set sidetone fade-in time in milliseconds"
+      long: |
+        Controls how quickly the sidetone volume ramps up when a
+        dit or dah begins, reducing audio clicking artifacts.
+
+        0 ms = instant (may cause clicks)
+        5-10 ms = smooth attack (recommended)
+        20+ ms = soft attack (may sound mushy at high WPM)
+
+        A short fade-in (5 ms) eliminates clicks while preserving
+        crisp keying characteristics.
+
+        Default: 5 ms
+      examples:
+        - command: "audio fade_in 5"
+          description: "Set to default 5 ms fade-in"
+        - command: "audio fade_in 0"
+          description: "Disable fade-in (instant attack)"
+        - command: "audio fade_in 10"
+          description: "Longer fade for smoother attack"
+
+  - subsystem: audio
+    name: fade_out
+    nvs_key: audio_fadeout
+    field: audio.sidetone_fade_out_ms
+    type: UINT16
+    min: 0
+    max: 100
+    reset_required: false
+    category: normal
+    description: "Sidetone fade-out time"
+    unit: "ms"
+    validator: RangeValidatorTag
+    help:
+      short: "Set sidetone fade-out time in milliseconds"
+      long: |
+        Controls how quickly the sidetone volume ramps down when a
+        dit or dah ends, reducing audio clicking artifacts.
+
+        0 ms = instant cutoff (may cause clicks)
+        5-10 ms = smooth release (recommended)
+        20+ ms = soft release (may blur element boundaries)
+
+        A short fade-out (5 ms) eliminates clicks while keeping
+        dits and dahs distinct at all speeds.
+
+        Default: 5 ms
+      examples:
+        - command: "audio fade_out 5"
+          description: "Set to default 5 ms fade-out"
+        - command: "audio fade_out 0"
+          description: "Disable fade-out (instant release)"
+        - command: "audio fade_out 10"
+          description: "Longer fade for smoother release"
+
+  - subsystem: audio
+    name: enabled
+    nvs_key: audio_enabled
+    field: audio.sidetone_enabled
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: normal
+    description: "Sidetone enabled"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable or disable sidetone audio output"
+      long: |
+        Controls whether the keyer generates sidetone audio.
+
+        true (1) = Sidetone enabled (default)
+        false (0) = Sidetone disabled (silent operation)
+
+        Disabling sidetone is useful when:
+        - Using the keyer with a transceiver that has its own sidetone
+        - Operating in a noise-sensitive environment
+        - Testing hardware without audio feedback
+
+        When disabled, the keyer still generates TX output and
+        visual feedback (NeoPixel), but no audio is produced.
+
+        Default: true (enabled)
+      examples:
+        - command: "audio enabled true"
+          description: "Enable sidetone (default)"
+        - command: "audio enabled false"
+          description: "Disable sidetone (silent mode)"
+
+  # ============================================================================
+  # KEYING SUBSYSTEM - Iambic keying behavior and speed control
+  # ============================================================================
+
+  - subsystem: keying
+    name: wpm
+    nvs_key: key_wpm
+    field: keying.speed_wpm
+    type: UINT32
+    min: 5
+    max: 80
+    reset_required: false
+    category: normal
+    description: "Keying speed"
+    unit: "WPM"
+    validator: RangeValidatorTag
+    help:
+      short: "Set keying speed in words per minute (WPM)"
+      long: |
+        Controls the speed of automatic dit/dah generation.
+
+        WPM (Words Per Minute) uses the PARIS standard:
+        - PARIS = 50 dit-lengths (including spaces)
+        - 1 WPM = 1 PARIS word per minute
+        - Dit length (ms) = 1200 / WPM
+
+        Common speeds:
+        - 10-15 WPM: Beginner/learning
+        - 18-25 WPM: General QSO, contesting, ARRL code test
+        - 30-40 WPM: High-speed operators, DXpeditions
+        - 50+ WPM: Expert operators, special events
+
+        Valid range: 5-80 WPM
+        Default: 18 WPM
+      examples:
+        - command: "keying wpm 18"
+          description: "Set to default 18 WPM"
+        - command: "keying wpm 25"
+          description: "Contest speed"
+        - command: "keying wpm 12"
+          description: "Slow for learning/QRS"
+
+  - subsystem: keying
+    name: preset
+    nvs_key: key_preset
+    field: keying.preset
+    type: ENUM
+    enum_type: KeyingPreset
+    values:
+      - name: V0
+        value: kSuperKeyerBoth
+        description: "SuperKeyer Both (standard iambic B)"
+      - name: V1
+        value: kSuperKeyerDot
+        description: "SuperKeyer Dit"
+      - name: V2
+        value: kSuperKeyerDash
+        description: "SuperKeyer Dah"
+      - name: V3
+        value: kAccukeyerBoth
+        description: "Accukeyer Both"
+      - name: V4
+        value: kAccukeyerDot
+        description: "Accukeyer Dit"
+      - name: V5
+        value: kAccukeyerDash
+        description: "Accukeyer Dah"
+      - name: V6
+        value: kCurtisABoth
+        description: "Curtis A Both"
+      - name: V7
+        value: kCurtisADot
+        description: "Curtis A Dit"
+      - name: V8
+        value: kCurtisADash
+        description: "Curtis A Dash"
+      - name: V9
+        value: kNoMemory
+        description: "No Memory"
+      - name: MANUAL
+        value: kManual
+        description: "Manual mode (custom parameters)"
+    reset_required: false
+    category: normal
+    description: "Iambic keying preset (V0-V9, MANUAL)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Select iambic keying preset (0-9=SuperKeyer variants, 255=manual)"
+      long: |
+        Selects the iambic keying mode/preset.
+
+        SuperKeyer presets (0-9):
+        - V0 (0): SuperKeyer Both (standard iambic B)
+        - V1 (1): SuperKeyer Dit
+        - V2 (2): SuperKeyer Dah
+        - V3 (3): SuperKeyer Both, Late
+        - V4 (4): SuperKeyer Dit, Late
+        - V5 (5): SuperKeyer Dah, Late
+        - V6 (6): SuperKeyer Both (alternate)
+        - V7 (7): SuperKeyer Dit (alternate)
+        - V8 (8): SuperKeyer Dah (alternate)
+        - V9 (9): SuperKeyer Both, Late (alternate)
+
+        Manual mode (255): Allows fine-tuning individual parameters
+        (window_open, window_close, late_release, dit_memory, dah_memory)
+
+        Default: 0 (V0 - Standard iambic B behavior)
+      examples:
+        - command: "keying preset 0"
+          description: "SuperKeyer V0 (standard iambic B)"
+        - command: "keying preset 3"
+          description: "SuperKeyer V3 (both with late release)"
+        - command: "keying preset 255"
+          description: "Manual mode (custom parameters)"
+
+  - subsystem: keying
+    name: window_open
+    nvs_key: key_mem_open
+    field: keying.memory_open_percent
+    type: FLOAT
+    min: 0
+    max: 100
+    reset_required: false
+    category: normal
+    description: "Memory window open threshold"
+    unit: "%"
+    validator: RangeValidatorTag
+    help:
+      short: "Set memory window open threshold (0-100%)"
+      long: |
+        Controls when the opposite paddle is sampled during an element.
+
+        The memory window is the time period during a dit or dah when
+        the keyer checks if the opposite paddle is pressed.
+
+        window_open: Start of sampling window (% into element)
+        - 0% = sample from element start
+        - 50% = sample from middle of element
+        - 100% = sample only at element end
+
+        Typical values: 40-60%
+        Lower values = more aggressive iambic action
+        Higher values = tighter iambic control
+
+        Only active in MANUAL mode (preset=255).
+
+        Default: 50%
+      examples:
+        - command: "keying window_open 50"
+          description: "Sample from midpoint (default)"
+        - command: "keying window_open 40"
+          description: "Earlier sampling (more aggressive)"
+        - command: "keying window_open 60"
+          description: "Later sampling (tighter control)"
+
+  - subsystem: keying
+    name: window_close
+    nvs_key: key_mem_close
+    field: keying.memory_close_percent
+    type: FLOAT
+    min: 0
+    max: 100
+    reset_required: false
+    category: advanced
+    description: "Memory window close threshold"
+    unit: "%"
+    validator: RangeValidatorTag
+    help:
+      short: "Set memory window close threshold (0-100%)"
+      long: |
+        Controls when the opposite paddle sampling window closes.
+
+        window_close: End of sampling window (% into element)
+        - Must be >= window_open
+        - 100% = sample until element end
+        - <100% = stop sampling early
+
+        Wide window (open=40%, close=100%):
+        - More forgiving for sloppy keying
+        - Easier to trigger alternation
+
+        Narrow window (open=50%, close=70%):
+        - Requires precise timing
+        - Less likely to trigger unintended alternation
+
+        Only active in MANUAL mode (preset=255).
+
+        Default: 100%
+      examples:
+        - command: "keying window_close 100"
+          description: "Sample until element end (default)"
+        - command: "keying window_close 80"
+          description: "Stop sampling at 80% of element"
+        - command: "keying window_close 70"
+          description: "Narrow window for precise control"
+
+  - subsystem: keying
+    name: dit_memory
+    nvs_key: key_man_dit
+    field: keying.manual_memory_enable_dit
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: advanced
+    description: "Manual mode dit memory enable"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable dit memory in manual mode"
+      long: |
+        Controls whether the dit paddle can queue a dit in manual mode.
+
+        true (1): Dit memory enabled
+        - Pressing dit while dah is active queues a dit to play next.
+        - Standard iambic behavior.
+
+        false (0): Dit memory disabled
+        - Pressing dit while dah is active does nothing.
+        - Useful for straight-key like operation or debugging.
+
+        Only active in MANUAL mode (preset=255).
+        In preset modes (0-9), dit_memory is controlled by the preset.
+
+        Default: true
+      examples:
+        - command: "keying dit_memory true"
+          description: "Enable dit memory (standard iambic)"
+        - command: "keying dit_memory false"
+          description: "Disable dit memory (no queuing)"
+
+  - subsystem: keying
+    name: dah_memory
+    nvs_key: key_man_dah
+    field: keying.manual_memory_enable_dah
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: advanced
+    description: "Manual mode dah memory enable"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable dah memory in manual mode"
+      long: |
+        Controls whether the dah paddle can queue a dah in manual mode.
+
+        true (1): Dah memory enabled
+        - Pressing dah while dit is active queues a dah to play next.
+        - Standard iambic behavior.
+
+        false (0): Dah memory disabled
+        - Pressing dah while dit is active does nothing.
+        - Useful for straight-key like operation or debugging.
+
+        Only active in MANUAL mode (preset=255).
+        In preset modes (0-9), dah_memory is controlled by the preset.
+
+        Default: true
+      examples:
+        - command: "keying dah_memory true"
+          description: "Enable dah memory (standard iambic)"
+        - command: "keying dah_memory false"
+          description: "Disable dah memory (no queuing)"
+
+  - subsystem: keying
+    name: latch
+    nvs_key: key_man_lat
+    field: keying.manual_use_state_latch
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: advanced
+    description: "Manual mode use state latch"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable state latch in manual mode"
+      long: |
+        Controls whether memory sampling uses state latch or edge trigger.
+
+        true (1): State latch mode
+        - Memory samples the *state* of the opposite paddle during window.
+        - If opposite paddle is *held down* during memory window, queue element.
+        - More forgiving timing (you can press early and hold).
+
+        false (0): Edge trigger mode
+        - Memory samples *transitions* (press events) of opposite paddle.
+        - Opposite paddle must be *pressed* during memory window to queue.
+        - Stricter timing, but more precise control.
+
+        Only active in MANUAL mode (preset=255).
+        In preset modes (0-9), latch behavior is controlled by the preset.
+
+        Default: true (state latch)
+      examples:
+        - command: "keying latch true"
+          description: "Enable state latch (more forgiving)"
+        - command: "keying latch false"
+          description: "Enable edge trigger (stricter timing)"
+
+  - subsystem: keying
+    name: swap_paddles
+    nvs_key: key_swap_pdl
+    field: keying.swap_paddles
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: advanced
+    description: "Swap dit and dah paddle assignments"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Swap dit and dah paddle GPIO assignments"
+      long: |
+        Swaps the dit and dah paddle GPIO assignments without rewiring hardware.
+
+        false (0): Normal paddle mapping (default)
+        - Left paddle (GPIO dit_gpio) = Dit
+        - Right paddle (GPIO dah_gpio) = Dah
+
+        true (1): Reversed paddle mapping
+        - Left paddle (GPIO dit_gpio) = Dah
+        - Right paddle (GPIO dah_gpio) = Dit
+
+        Use cases:
+        - Left-handed operators who prefer reversed paddle orientation
+        - Paddles wired backwards and you don't want to rewire
+        - Testing paddle hardware without physical rewiring
+
+        Note: This swaps the logical interpretation of GPIO pins, not the
+        physical GPIO numbers. The hardware wiring remains unchanged.
+
+        Default: false (normal mapping)
+      examples:
+        - command: "keying swap_paddles false"
+          description: "Normal paddle mapping (right-handed)"
+        - command: "keying swap_paddles true"
+          description: "Reversed paddle mapping (left-handed)"
+
+  - subsystem: keying
+    name: decoder_enabled
+    nvs_key: key_dec_en
+    field: keying.decoder_enabled
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: normal
+    description: "Enable morse code decoder"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable morse code decoder"
+      long: |
+        Controls whether the morse decoder processes incoming keying.
+
+        false (0): Decoder disabled
+        - Keying events are not decoded to text
+        - No CPU overhead from decoder state machine
+        - Decoded buffer is preserved (not cleared)
+
+        true (1): Decoder enabled (default)
+        - Incoming keying is analyzed and decoded to text
+        - Decoded characters available via console commands
+        - Real-time decoding with adaptive timing classifier
+
+        The decoder uses an adaptive timing classifier that learns your
+        sending speed (10-60 WPM) and supports non-standard dit/dah ratios
+        (2.5:1 to 4:1). It automatically adapts to speed changes.
+
+        Use cases:
+        - Training: See what you're sending in real-time
+        - Debugging: Verify keying timing accuracy
+        - Logging: Record transmitted morse code as text
+
+        Default: true (enabled)
+      examples:
+        - command: "keying decoder_enabled true"
+          description: "Enable decoder (see your keying as text)"
+        - command: "keying decoder_enabled false"
+          description: "Disable decoder (no decoding overhead)"
+
+  # --- L-S-P Timing System (3 parameters) ---
+  # L-S-P (Linea-Spazio-Punto) - Industry-standard HST/QRQ timing parameters
+  # Default: 30-50-50 (3:1 dash ratio, 1:1 gap, 100% dit)
+
+  - subsystem: keying
+    name: timing_l
+    nvs_key: key_timing_l
+    field: keying.timing_l
+    type: UINT8
+    min: 10
+    max: 90
+    reset_required: false
+    category: advanced
+    description: "L - Dash length (L-S-P timing)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set dash length parameter (10-90, default 30 = 3:1 ratio)"
+      long: |
+        L parameter from L-S-P (Linea-Spazio-Punto) timing system.
+
+        Controls dash duration as percentage of theoretical dash length.
+        L=30 is the reference point (100% = 3.0 dit standard ratio).
+
+        Formula: dash = (L/10.0) * dit_effective
+
+        Range: 10-90
+        - L=10 → 1.0:1 ratio (very short dashes)
+        - L=20 → 2.0:1 ratio
+        - L=30 → 3.0:1 ratio (standard, default)
+        - L=40 → 4.0:1 ratio (HST style)
+        - L=90 → 9.0:1 ratio (extreme)
+
+        Use cases:
+        - HST operators: L=40 for better character separation at 35+ WPM
+        - QRQ contests: L=25 for faster sending without changing WPM setting
+        - Standard operation: L=30 (PARIS 3:1 ratio)
+
+        Note: Changes apply globally to all presets. Effective WPM will vary
+        from nominal WPM based on L-S-P settings.
+
+        Default: 30 (3:1 ratio)
+      examples:
+        - command: "keying timing_l 30"
+          description: "Standard 3:1 dash ratio (default)"
+        - command: "keying timing_l 40"
+          description: "4:1 ratio for HST operation"
+
+  - subsystem: keying
+    name: timing_s
+    nvs_key: key_timing_s
+    field: keying.timing_s
+    type: UINT8
+    min: 0
+    max: 99
+    reset_required: false
+    category: advanced
+    description: "S - Gap space (L-S-P timing)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set intra-element gap duration (0-99, default 50 = 1:1 ratio)"
+      long: |
+        S parameter from L-S-P (Linea-Spazio-Punto) timing system.
+
+        Controls intra-element gap (spacing between dit/dah within a character)
+        as percentage of theoretical gap duration.
+        S=50 is the reference point (100% = 1.0 dit standard).
+
+        Formula: gap = (S/50.0) * dit_effective
+
+        Range: 0-99
+        - S=0 → 0.0:1 ratio (no gap, extreme)
+        - S=25 → 0.5:1 ratio (tight spacing)
+        - S=50 → 1.0:1 ratio (standard, default)
+        - S=75 → 1.5:1 ratio (wide spacing)
+        - S=99 → 1.98:1 ratio (very wide)
+
+        Use cases:
+        - Add "breathing room": S=60 for clearer character spacing
+        - Tight sending: S=40 for faster effective WPM
+        - Standard operation: S=50 (PARIS standard)
+
+        Note: Affects only gaps within characters, not inter-character gaps.
+
+        Default: 50 (1:1 ratio)
+      examples:
+        - command: "keying timing_s 50"
+          description: "Standard 1:1 gap (default)"
+        - command: "keying timing_s 60"
+          description: "20% wider gaps for clarity"
+
+  - subsystem: keying
+    name: timing_p
+    nvs_key: key_timing_p
+    field: keying.timing_p
+    type: UINT8
+    min: 10
+    max: 99
+    reset_required: false
+    category: advanced
+    description: "P - Dit duration (L-S-P timing)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set dit duration percentage (10-99, default 50 = 100%)"
+      long: |
+        P parameter from L-S-P (Linea-Spazio-Punto) timing system.
+
+        Controls dit duration as percentage of theoretical dit calculated from WPM.
+        P=50 is the reference point (100% = theoretical dit from WPM formula).
+
+        Formula: dit_effective = dit_theoretical * (P/50.0)
+
+        Range: 10-99 (P=10 minimum to prevent zero duration)
+        - P=10 → 20% of theoretical (very fast)
+        - P=25 → 50% of theoretical
+        - P=50 → 100% of theoretical (standard, default)
+        - P=75 → 150% of theoretical (slower)
+        - P=99 → 198% of theoretical (very slow)
+
+        Use cases:
+        - Slow down sending: P=60 while keeping same WPM setting
+        - Speed up sending: P=40 for practice or QRQ
+        - Standard operation: P=50 (theoretical dit from WPM)
+
+        Note: P affects ALL elements (dit, dash, gaps) proportionally.
+        Effective WPM will change significantly with P adjustments.
+
+        Warning: Very low P values (P<20) may produce unusable timing.
+
+        Default: 50 (100%)
+      examples:
+        - command: "keying timing_p 50"
+          description: "Standard 100% dit duration (default)"
+        - command: "keying timing_p 60"
+          description: "120% dit duration (slower)"
+
+  # ============================================================================
+  # HARDWARE SUBSYSTEM - GPIO pins and hardware configuration
+  # All hardware parameters require device reboot to take effect (reset_required: true)
+  # ============================================================================
+
+  # --- Paddle Input Pins (6 parameters) ---
+
+  - subsystem: hardware
+    name: dit_gpio
+    nvs_key: paddle_dit
+    field: paddle_pins.dit_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "Dit paddle GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for dit paddle input"
+      long: |
+        GPIO pin connected to the dit paddle input.
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        Configure paddles_active_low to match your hardware:
+        - true: Paddle closes to ground (pull-up resistor)
+        - false: Paddle closes to 3.3V (pull-down resistor)
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware dit_gpio 15"
+          description: "Set dit paddle to GPIO 15"
+        - command: "hardware dit_gpio 5"
+          description: "Set dit paddle to GPIO 5"
+
+  - subsystem: hardware
+    name: dah_gpio
+    nvs_key: paddle_dah
+    field: paddle_pins.dah_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "Dah paddle GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for dah paddle input"
+      long: |
+        GPIO pin connected to the dah paddle input.
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        Configure paddles_active_low to match your hardware:
+        - true: Paddle closes to ground (pull-up resistor)
+        - false: Paddle closes to 3.3V (pull-down resistor)
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware dah_gpio 16"
+          description: "Set dah paddle to GPIO 16"
+        - command: "hardware dah_gpio 6"
+          description: "Set dah paddle to GPIO 6"
+
+  - subsystem: hardware
+    name: key_gpio
+    nvs_key: paddle_key
+    field: paddle_pins.key_gpio
+    type: INT32
+    min: -1
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "Straight key GPIO pin (-1=disabled)"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for straight key input (-1 to disable)"
+      long: |
+        GPIO pin connected to the straight key input.
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins), or -1 to disable
+        Must not conflict with other GPIO assignments.
+
+        When enabled, this pin acts as a straight key input,
+        directly controlling TX output without iambic logic.
+
+        Set to -1 if your hardware doesn't have a straight key input.
+
+        Requires device reboot after changing.
+
+        Default: -1 (disabled)
+      examples:
+        - command: "hardware key_gpio -1"
+          description: "Disable straight key input (default)"
+        - command: "hardware key_gpio 17"
+          description: "Enable straight key on GPIO 17"
+
+  - subsystem: hardware
+    name: paddles_active_low
+    nvs_key: paddle_alow
+    field: paddle_pins.paddles_active_low
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: true
+    category: advanced
+    description: "Paddles active low"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set paddle polarity (true=active-low, false=active-high)"
+      long: |
+        Configures the paddle input polarity.
+
+        true (1): Active-low (default)
+        - Paddle input goes LOW (to ground) when pressed
+        - Requires pull-up resistors (internal or external)
+        - Most common configuration
+
+        false (0): Active-high
+        - Paddle input goes HIGH (to 3.3V) when pressed
+        - Requires pull-down resistors (internal or external)
+        - Less common, but valid for some hardware
+
+        Must match your hardware design.
+
+        Requires device reboot after changing.
+
+        Default: true (active-low)
+      examples:
+        - command: "hardware paddles_active_low true"
+          description: "Active-low (default, pull-up)"
+        - command: "hardware paddles_active_low false"
+          description: "Active-high (pull-down)"
+
+  - subsystem: hardware
+    name: use_pullups
+    nvs_key: paddle_pullup
+    field: paddle_pins.use_pullups
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: true
+    category: advanced
+    description: "Enable pull-up resistors"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable internal pull-up resistors on paddle inputs"
+      long: |
+        Controls whether ESP32-S3 internal pull-up resistors are
+        enabled on paddle GPIO pins (dit, dah, key).
+
+        true (1): Enable internal pull-ups
+        - Required if hardware doesn't have external pull-ups
+        - Use with paddles_active_low=true
+
+        false (0): Disable internal pull-ups
+        - Use if hardware has external pull-up resistors
+        - Reduces power consumption slightly
+
+        Cannot be true simultaneously with use_pulldowns.
+
+        Requires device reboot after changing.
+
+        Default: true (enabled)
+      examples:
+        - command: "hardware use_pullups true"
+          description: "Enable internal pull-ups (default)"
+        - command: "hardware use_pullups false"
+          description: "Disable pull-ups (use external)"
+
+  - subsystem: hardware
+    name: use_pulldowns
+    nvs_key: paddle_pulldn
+    field: paddle_pins.use_pulldowns
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: true
+    category: advanced
+    description: "Enable pull-down resistors"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable internal pull-down resistors on paddle inputs"
+      long: |
+        Controls whether ESP32-S3 internal pull-down resistors are
+        enabled on paddle GPIO pins (dit, dah, key).
+
+        true (1): Enable internal pull-downs
+        - Required if hardware doesn't have external pull-downs
+        - Use with paddles_active_low=false (active-high)
+
+        false (0): Disable internal pull-downs
+        - Use if hardware has external pull-down resistors
+        - Standard configuration for active-low paddles
+
+        Cannot be true simultaneously with use_pullups.
+
+        Requires device reboot after changing.
+
+        Default: false (disabled)
+      examples:
+        - command: "hardware use_pulldowns false"
+          description: "Disable pull-downs (default)"
+        - command: "hardware use_pulldowns true"
+          description: "Enable internal pull-downs (active-high mode)"
+
+  # --- Output Pins (2 parameters) ---
+
+  - subsystem: hardware
+    name: trx_gpio
+    nvs_key: output_trx
+    field: output_pins.trx_gpio
+    type: INT32
+    min: -1
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "TX output GPIO pin (-1=disabled)"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for TX output (-1 to disable)"
+      long: |
+        GPIO pin that controls the transceiver TX line.
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins), or -1 to disable
+        Must not conflict with other GPIO assignments.
+
+        This pin goes active during keying to key the transmitter.
+        Configure trx_active_high to match your hardware:
+        - true: TX output goes HIGH (3.3V) when active
+        - false: TX output goes LOW (ground) when active
+
+        Set to -1 for sidetone-only operation without TX control.
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware trx_gpio 18"
+          description: "Set TX output to GPIO 18"
+        - command: "hardware trx_gpio -1"
+          description: "Disable TX output (sidetone only)"
+
+  - subsystem: hardware
+    name: trx_active_high
+    nvs_key: output_trx_ah
+    field: output_pins.trx_active_high
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: true
+    category: normal
+    description: "TX output active high"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set TX output polarity (true=active-high, false=active-low)"
+      long: |
+        Configures the TX output polarity.
+
+        true (1): Active-high
+        - TX output goes HIGH (3.3V) when transmitting
+        - Most common for transistor/relay drivers
+
+        false (0): Active-low
+        - TX output goes LOW (ground) when transmitting
+        - Some hardware uses active-low signaling
+
+        Must match your transceiver's keying interface.
+
+        Requires device reboot after changing.
+
+        Default: true (active-high)
+      examples:
+        - command: "hardware trx_active_high true"
+          description: "Active-high TX output (default)"
+        - command: "hardware trx_active_high false"
+          description: "Active-low TX output"
+
+  # --- NeoPixel (2 parameters) ---
+
+  - subsystem: hardware
+    name: neopixel_gpio
+    nvs_key: neopixel_gpio
+    field: neopixel.gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "NeoPixel data GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for NeoPixel LED data"
+      long: |
+        GPIO pin connected to the NeoPixel (WS2812B) LED data line.
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        NeoPixel LEDs provide visual feedback for keying state:
+        - Idle: Dim blue
+        - Dit: Green flash
+        - Dah: Red flash
+        - Both: Yellow flash
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware neopixel_gpio 8"
+          description: "Set NeoPixel data to GPIO 8"
+        - command: "hardware neopixel_gpio 48"
+          description: "Set NeoPixel data to GPIO 48"
+
+  - subsystem: hardware
+    name: neopixel_count
+    nvs_key: neopixel_count
+    field: neopixel.led_count
+    type: INT32
+    min: 1
+    max: 256
+    reset_required: true
+    category: advanced
+    description: "Number of NeoPixel LEDs"
+    unit: "LEDs"
+    validator: RangeValidatorTag
+    help:
+      short: "Set number of NeoPixel LEDs in the chain"
+      long: |
+        Number of NeoPixel (WS2812B) LEDs connected in series.
+
+        Valid range: 1-256 LEDs
+
+        All LEDs in the chain display the same keying state.
+        More LEDs = brighter visual feedback, but higher current draw.
+
+        Typical values:
+        - 1 LED: Minimal indicator
+        - 3-8 LEDs: Good visibility
+        - 16+ LEDs: LED ring or strip for contests
+
+        Requires device reboot after changing.
+
+        Default: Hardware-dependent (usually 1-8)
+      examples:
+        - command: "hardware neopixel_count 1"
+          description: "Single NeoPixel LED"
+        - command: "hardware neopixel_count 8"
+          description: "8-LED NeoPixel ring"
+        - command: "hardware neopixel_count 16"
+          description: "16-LED NeoPixel strip"
+
+  # --- I2C Pins (2 parameters) ---
+
+  - subsystem: hardware
+    name: i2c_sda
+    nvs_key: i2c_sda
+    field: i2c.sda_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "I2C SDA GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for I2C SDA (data)"
+      long: |
+        GPIO pin for I2C SDA (data line).
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        I2C is used to communicate with:
+        - Audio codec (CS42L52)
+        - IO expander (TCA6408A)
+
+        Requires external pull-up resistors (typically 4.7kΩ).
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware i2c_sda 10"
+          description: "Set I2C SDA to GPIO 10"
+        - command: "hardware i2c_sda 21"
+          description: "Set I2C SDA to GPIO 21"
+
+  - subsystem: hardware
+    name: i2c_scl
+    nvs_key: i2c_scl
+    field: i2c.scl_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "I2C SCL GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for I2C SCL (clock)"
+      long: |
+        GPIO pin for I2C SCL (clock line).
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        I2C is used to communicate with:
+        - Audio codec (CS42L52)
+        - IO expander (TCA6408A)
+
+        Requires external pull-up resistors (typically 4.7kΩ).
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware i2c_scl 11"
+          description: "Set I2C SCL to GPIO 11"
+        - command: "hardware i2c_scl 22"
+          description: "Set I2C SCL to GPIO 22"
+
+  # --- I2S Audio Pins (4 parameters) ---
+
+  - subsystem: hardware
+    name: i2s_mclk
+    nvs_key: i2s_mclk
+    field: i2s.mclk_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "I2S master clock GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for I2S MCLK (master clock)"
+      long: |
+        GPIO pin for I2S MCLK (master clock output to audio codec).
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        MCLK provides the reference clock for the CS42L52 audio codec.
+        Typical frequency: 11.2896 MHz (256x 44.1 kHz sample rate).
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware i2s_mclk 0"
+          description: "Set I2S MCLK to GPIO 0"
+        - command: "hardware i2s_mclk 3"
+          description: "Set I2S MCLK to GPIO 3"
+
+  - subsystem: hardware
+    name: i2s_bclk
+    nvs_key: i2s_bclk
+    field: i2s.bclk_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "I2S bit clock GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for I2S BCLK (bit clock)"
+      long: |
+        GPIO pin for I2S BCLK (bit clock output to audio codec).
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        BCLK clocks audio data bits.
+        Typical frequency: 2.8224 MHz (64x 44.1 kHz sample rate).
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware i2s_bclk 4"
+          description: "Set I2S BCLK to GPIO 4"
+        - command: "hardware i2s_bclk 12"
+          description: "Set I2S BCLK to GPIO 12"
+
+  - subsystem: hardware
+    name: i2s_lrck
+    nvs_key: i2s_lrck
+    field: i2s.lrck_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "I2S L/R clock GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for I2S LRCK (left/right clock)"
+      long: |
+        GPIO pin for I2S LRCK (word select / frame sync to audio codec).
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        LRCK indicates left/right channel (stereo audio).
+        Frequency equals audio sample rate (44.1 kHz typical).
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware i2s_lrck 2"
+          description: "Set I2S LRCK to GPIO 2"
+        - command: "hardware i2s_lrck 13"
+          description: "Set I2S LRCK to GPIO 13"
+
+  - subsystem: hardware
+    name: i2s_dout
+    nvs_key: i2s_dout
+    field: i2s.dout_gpio
+    type: INT32
+    min: 0
+    max: 48
+    reset_required: true
+    category: advanced
+    description: "I2S data out GPIO pin"
+    unit: ""
+    validator: GpioUniqueValidatorTag
+    help:
+      short: "Set GPIO pin for I2S DOUT (data output)"
+      long: |
+        GPIO pin for I2S DOUT (audio data output to codec).
+
+        Valid range: 0-48 (ESP32-S3 GPIO pins)
+        Must not conflict with other GPIO assignments.
+
+        DOUT carries the sidetone audio samples to the CS42L52 codec.
+        Data format: I2S standard, 16-bit stereo @ 44.1 kHz.
+
+        Requires device reboot after changing.
+
+        Default: GPIO pin from hardware design
+      examples:
+        - command: "hardware i2s_dout 1"
+          description: "Set I2S DOUT to GPIO 1"
+        - command: "hardware i2s_dout 14"
+          description: "Set I2S DOUT to GPIO 14"
+
+  # --- Audio Codec (1 parameter) ---
+
+  - subsystem: hardware
+    name: codec_addr
+    nvs_key: codec_addr
+    field: codec.i2c_address
+    type: UINT8
+    min: 0
+    max: 127
+    reset_required: true
+    category: advanced
+    description: "Audio codec I2C address"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set I2C address for CS42L52 audio codec"
+      long: |
+        7-bit I2C address for the CS42L52 audio codec.
+
+        Valid range: 0-127 (0x00-0x7F)
+
+        Standard CS42L52 I2C addresses (set by AD0 pin):
+        - 0x4A (AD0 = LOW, most common)
+        - 0x4B (AD0 = HIGH)
+
+        Must match hardware jumper/strap configuration.
+
+        Requires device reboot after changing.
+
+        Default: 0x4A
+      examples:
+        - command: "hardware codec_addr 0x4A"
+          description: "CS42L52 with AD0=LOW (default)"
+        - command: "hardware codec_addr 0x4B"
+          description: "CS42L52 with AD0=HIGH"
+
+  # --- IO Expander (3 parameters) ---
+
+  - subsystem: hardware
+    name: ioexp_addr
+    nvs_key: ioexp_addr
+    field: io_expander.i2c_address
+    type: UINT8
+    min: 0
+    max: 127
+    reset_required: true
+    category: advanced
+    description: "IO expander I2C address"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set I2C address for TCA6408A IO expander"
+      long: |
+        7-bit I2C address for the TCA6408A IO expander.
+
+        Valid range: 0-127 (0x00-0x7F)
+
+        Standard TCA6408A I2C addresses (set by ADDR pin):
+        - 0x20 (ADDR = GND)
+        - 0x21 (ADDR = VCC)
+
+        Must match hardware jumper/strap configuration.
+
+        Requires device reboot after changing.
+
+        Default: 0x20
+      examples:
+        - command: "hardware ioexp_addr 0x20"
+          description: "TCA6408A with ADDR=GND (default)"
+        - command: "hardware ioexp_addr 0x21"
+          description: "TCA6408A with ADDR=VCC"
+
+  - subsystem: hardware
+    name: ioexp_usb_sel
+    nvs_key: ioexp_usbsel
+    field: io_expander.usb_selector_pin
+    type: INT8
+    min: -1
+    max: 15
+    reset_required: true
+    category: advanced
+    description: "IO expander USB selector pin (-1=disabled)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set IO expander pin for USB selector (-1 to disable)"
+      long: |
+        TCA6408A pin number (P0-P7) for USB selector control.
+
+        Valid range: 0-7 (TCA6408A pins P0-P7), or -1 to disable
+
+        This pin controls a USB multiplexer to switch between:
+        - ESP32-S3 USB (for programming/debug)
+        - External USB port (for host operation)
+
+        Set to -1 if your hardware doesn't have USB switching.
+
+        Requires device reboot after changing.
+
+        Default: -1 (disabled) or hardware-dependent
+      examples:
+        - command: "hardware ioexp_usb_sel -1"
+          description: "Disable USB selector"
+        - command: "hardware ioexp_usb_sel 2"
+          description: "USB selector on P2"
+
+  - subsystem: hardware
+    name: ioexp_pa_enable
+    nvs_key: ioexp_pa_en
+    field: io_expander.pa_enable_pin
+    type: INT8
+    min: -1
+    max: 15
+    reset_required: true
+    category: advanced
+    description: "IO expander PA enable pin (-1=disabled)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set IO expander pin for power amplifier enable (-1 to disable)"
+      long: |
+        TCA6408A pin number (P0-P7) for power amplifier enable.
+
+        Valid range: 0-7 (TCA6408A pins P0-P7), or -1 to disable
+
+        This pin enables an external audio power amplifier for
+        louder sidetone output (e.g., speaker instead of headphones).
+
+        Set to -1 if your hardware doesn't have a PA control.
+
+        Requires device reboot after changing.
+
+        Default: -1 (disabled) or hardware-dependent
+      examples:
+        - command: "hardware ioexp_pa_enable -1"
+          description: "Disable PA control"
+        - command: "hardware ioexp_pa_enable 5"
+          description: "PA enable on P5"
+
+  # ============================================================================
+  # WIFI SUBSYSTEM - Network connectivity
+  # ============================================================================
+
+  - subsystem: wifi
+    name: sta_ssid
+    nvs_key: wifi_sta_ssid
+    field: wifi.sta_ssid
+    type: STRING
+    min: 0
+    max: 31
+    reset_required: false
+    category: normal
+    description: "Station SSID"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set SSID for WiFi station (client) mode"
+      long: |
+        SSID (network name) to connect to in station mode.
+
+        Valid: 0-31 printable ASCII characters (space through tilde)
+        Empty string disables station mode.
+
+        Station mode connects the keyer to an existing WiFi network,
+        allowing access to Web UI and console via network IP address.
+
+        If station connection fails, the keyer can fall back to AP mode
+        (controlled by wifi.fallback parameter).
+
+        Default: "" (empty, station mode disabled)
+      examples:
+        - command: "wifi sta_ssid MyNetwork"
+          description: "Connect to network 'MyNetwork'"
+        - command: "wifi sta_ssid \"My Network 5G\""
+          description: "Connect to network with spaces"
+        - command: "wifi sta_ssid \"\""
+          description: "Disable station mode (AP only)"
+
+  - subsystem: wifi
+    name: sta_password
+    nvs_key: wifi_sta_pass
+    field: wifi.sta_password
+    type: STRING
+    min: 0
+    max: 63
+    reset_required: false
+    category: normal
+    description: "Station password"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set password for WiFi station (client) mode"
+      long: |
+        Password (WPA2 PSK) for connecting to WiFi network in station mode.
+
+        Valid: 0-63 printable ASCII characters (space through tilde)
+        Empty string = open network (no password)
+
+        Password is stored in NVS (encrypted if NVS encryption enabled).
+        Not displayed in parameter listings for security.
+
+        Default: "" (empty, open network)
+      examples:
+        - command: "wifi sta_password MySecretPass123"
+          description: "Set WPA2 password"
+        - command: "wifi sta_password \"Pass with spaces\""
+          description: "Password with spaces"
+        - command: "wifi sta_password \"\""
+          description: "Open network (no password)"
+
+  - subsystem: wifi
+    name: ap_ssid
+    nvs_key: wifi_ap_ssid
+    field: wifi.ap_ssid
+    type: STRING
+    min: 4
+    max: 31
+    reset_required: false
+    category: normal
+    description: "Access Point SSID"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set SSID for WiFi Access Point (AP) mode"
+      long: |
+        SSID (network name) broadcast in Access Point mode.
+
+        Valid: 4-31 printable ASCII characters (space through tilde)
+        Minimum 4 characters required for AP mode.
+
+        In AP mode, the keyer creates its own WiFi network,
+        allowing direct connection for Web UI and console access.
+
+        Default AP IP address: 192.168.4.1
+
+        Typical format: "KeyerCall-IU3QEZ" (includes your callsign)
+
+        Default: "QRS2HST-Keyer"
+      examples:
+        - command: "wifi ap_ssid QRS2HST-IU3QEZ"
+          description: "AP with callsign"
+        - command: "wifi ap_ssid \"My Keyer\""
+          description: "Custom AP name"
+
+  - subsystem: wifi
+    name: ap_password
+    nvs_key: wifi_ap_pass
+    field: wifi.ap_password
+    type: STRING
+    min: 0
+    max: 63
+    reset_required: false
+    category: normal
+    description: "Access Point password"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set password for WiFi Access Point (AP) mode"
+      long: |
+        Password (WPA2 PSK) for Access Point mode.
+
+        Valid: 0-63 printable ASCII characters (space through tilde)
+        - 8-63 characters: WPA2-secured AP (recommended)
+        - 0-7 characters or empty: Open AP (no security)
+
+        For security, use a strong password (8+ characters) when
+        operating in public locations.
+
+        Password is stored in NVS (encrypted if NVS encryption enabled).
+
+        Default: "" (empty, open AP)
+      examples:
+        - command: "wifi ap_password SecureKey123"
+          description: "Set WPA2-secured AP"
+        - command: "wifi ap_password \"\""
+          description: "Open AP (no password)"
+
+  - subsystem: wifi
+    name: fallback
+    nvs_key: wifi_ap_fb
+    field: wifi.enable_ap_fallback
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: normal
+    description: "Enable AP fallback"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable AP fallback when station connection fails"
+      long: |
+        Controls whether keyer starts AP mode if station connection fails.
+
+        true (1): AP fallback enabled (default)
+        - Try to connect to wifi.sta_ssid
+        - If connection fails or times out, start AP mode
+        - Ensures keyer is always accessible
+
+        false (0): AP fallback disabled
+        - Only try station mode, never start AP
+        - If connection fails, WiFi remains disabled
+        - Use when you only want network access via existing WiFi
+
+        Fallback timeout controlled by wifi.sta_timeout parameter.
+
+        Default: true (enabled)
+      examples:
+        - command: "wifi fallback true"
+          description: "Enable AP fallback (default)"
+        - command: "wifi fallback false"
+          description: "Station only, no AP fallback"
+
+  - subsystem: wifi
+    name: sta_timeout
+    nvs_key: wifi_sta_tout
+    field: wifi.sta_timeout_sec
+    type: UINT16
+    min: 5
+    max: 300
+    reset_required: false
+    category: advanced
+    description: "STA connection timeout"
+    unit: "sec"
+    validator: RangeValidatorTag
+    help:
+      short: "Set timeout for WiFi station connection attempts (seconds)"
+      long: |
+        Maximum time to wait for WiFi station connection before
+        giving up and falling back to AP mode (if fallback enabled).
+
+        Valid range: 5-300 seconds
+
+        Typical values:
+        - 10-15 sec: Fast fallback (good for portable operation)
+        - 30 sec: Default (balanced)
+        - 60+ sec: Patient (for slow/congested networks)
+
+        If station connection succeeds before timeout, keyer
+        immediately proceeds with network initialization.
+
+        If wifi.fallback=false, timeout has no effect (keyer never
+        starts AP mode on failure).
+
+        Default: 30 seconds
+      examples:
+        - command: "wifi sta_timeout 30"
+          description: "30 second timeout (default)"
+        - command: "wifi sta_timeout 10"
+          description: "Fast 10 second timeout"
+        - command: "wifi sta_timeout 60"
+          description: "Patient 60 second timeout"
+
+  # ============================================================================
+  # REMOTE SUBSYSTEM - CWNet Remote Keying
+  # ============================================================================
+
+  - subsystem: remote
+    name: enabled
+    nvs_key: remote_en
+    field: remote.enabled
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: normal
+    description: "Enable remote CW client"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable CWNet remote keying client"
+      long: |
+        Controls whether the CWNet remote keying client is active.
+
+        true (1): Remote client enabled
+        - Connects to CWNet server at server_host:server_port
+        - Transmits local paddle keying to remote server
+        - Controls PTT for remote operation
+
+        false (0): Remote client disabled (default)
+        - Local keying only (no network transmission)
+
+        When enabled, requires valid server_host parameter.
+        Client automatically reconnects on connection loss if auto_reconnect=true.
+
+        Default: false (disabled)
+      examples:
+        - command: "remote enabled true"
+          description: "Enable remote keying client"
+        - command: "remote enabled false"
+          description: "Disable remote keying (local only)"
+
+  - subsystem: remote
+    name: server_host
+    nvs_key: remote_host
+    field: remote.server_host
+    type: STRING
+    min: 0
+    max: 63
+    reset_required: false
+    category: normal
+    description: "CWNet server hostname/IP"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set hostname or IP address of CWNet server"
+      long: |
+        Hostname or IP address of the CWNet server to connect to.
+
+        Valid: 0-63 printable ASCII characters
+        - IPv4 address: "192.168.1.100"
+        - IPv6 address: "2001:db8::1"
+        - Hostname: "cwserver.example.com"
+        - Empty string: disables remote client
+
+        DNS resolution is performed at connection time (non-blocking).
+        If resolution fails, client retries based on auto_reconnect setting.
+
+        Default: "" (empty, no server configured)
+      examples:
+        - command: "remote server_host 192.168.1.50"
+          description: "Connect to server at IP address"
+        - command: "remote server_host cwserver.local"
+          description: "Connect to server via mDNS hostname"
+        - command: "remote server_host \"\""
+          description: "Clear server configuration"
+
+  - subsystem: remote
+    name: server_port
+    nvs_key: remote_port
+    field: remote.server_port
+    type: UINT16
+    min: 1
+    max: 65535
+    reset_required: false
+    category: normal
+    description: "CWNet server port"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set TCP port for CWNet server connection"
+      long: |
+        TCP port number for CWNet protocol connection.
+
+        Valid range: 1-65535
+
+        Standard CWNet port: 7355 (per DL4YHF protocol specification)
+
+        Only change if your CWNet server runs on a non-standard port.
+
+        Default: 7355
+      examples:
+        - command: "remote server_port 7355"
+          description: "Standard CWNet port (default)"
+        - command: "remote server_port 8080"
+          description: "Custom server port"
+
+  - subsystem: remote
+    name: auto_reconnect
+    nvs_key: remote_reconn
+    field: remote.auto_reconnect
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: normal
+    description: "Enable automatic reconnection"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable automatic reconnection on connection loss"
+      long: |
+        Controls whether client automatically reconnects after disconnection.
+
+        true (1): Auto-reconnect enabled (default)
+        - Client retries connection every 5 seconds on failure
+        - Automatic recovery from network issues
+        - Suitable for permanent installations
+
+        false (0): Auto-reconnect disabled
+        - Client stops after first connection failure
+        - Manual restart required via 'remote start' command
+        - Suitable for temporary/portable operation
+
+        Does not affect behavior when remote.enabled=false.
+
+        Default: true (enabled)
+      examples:
+        - command: "remote auto_reconnect true"
+          description: "Enable auto-reconnect (default)"
+        - command: "remote auto_reconnect false"
+          description: "Disable auto-reconnect (manual mode)"
+
+  - subsystem: remote
+    name: ptt_tail_ms
+    nvs_key: remote_ptt_t
+    field: remote.ptt_tail_ms
+    type: UINT32
+    min: 0
+    max: 2000
+    reset_required: false
+    category: normal
+    description: "PTT tail delay (base)"
+    unit: "ms"
+    validator: RangeValidatorTag
+    help:
+      short: "Set base PTT tail delay in milliseconds"
+      long: |
+        Base PTT tail delay after last key-up event.
+
+        Valid range: 0-2000 milliseconds
+
+        PTT activates on first key-down and remains active for:
+        ptt_tail_ms + network_latency_ms after last key-up.
+
+        This allows remote transmitter to receive all keying data
+        before PTT releases.
+
+        Typical values:
+        - 200 ms: Default (per CWNet recommendations)
+        - 300-500 ms: High-latency networks
+        - 100 ms: Low-latency local networks
+
+        Network latency is measured dynamically via PING frames
+        and added automatically to the base tail time.
+
+        Default: 200 ms
+      examples:
+        - command: "remote ptt_tail_ms 200"
+          description: "Default 200 ms base tail"
+        - command: "remote ptt_tail_ms 300"
+          description: "Longer tail for high-latency links"
+        - command: "remote ptt_tail_ms 100"
+          description: "Shorter tail for low-latency LAN"
+
+  - subsystem: remote
+    name: stream_audio
+    nvs_key: remote_str_au
+    field: remote.stream_audio
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    description: "Enable remote audio streaming (RX mode)"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable remote CW audio reception during RX mode"
+      long: |
+        Controls whether remote CW audio is played through the speaker/headphones
+        during RX mode (when NOT transmitting locally).
+
+        true (1): Audio streaming enabled
+        - Remote audio plays through codec when paddle is idle
+        - Automatic TX/RX switching based on paddle state
+        - A-Law codec with 8→16kHz upsampling
+
+        false (0): Audio streaming disabled (default)
+        - No remote audio playback (silent RX mode)
+        - Only local sidetone during TX
+
+        When enabled, requires:
+        - Remote client connected (remote.enabled=true)
+        - Server sending CMD_AUDIO frames
+        - Paddle idle (not transmitting)
+
+        Use cases:
+        - Full-duplex monitoring: Hear remote station while operating
+        - Training: Listen to remote CW timing
+        - Silent operation: Disable to avoid remote audio distractions
+
+        Default: false (disabled for compatibility)
+      examples:
+        - command: "remote stream_audio false"
+          description: "Disable remote audio (default, silent RX)"
+        - command: "remote stream_audio true"
+          description: "Enable remote audio streaming (hear remote station)"
+
+  - subsystem: remote
+    name: stream_volume
+    nvs_key: remote_str_vol
+    field: remote.stream_volume
+    type: UINT8
+    min: 0
+    max: 100
+    reset_required: false
+    description: "Remote audio stream volume"
+    unit: "%"
+    validator: RangeValidatorTag
+    help:
+      short: "Set volume for remote audio streaming (0-100%)"
+      long: |
+        Controls the output volume of remote audio stream during RX mode.
+
+        Valid range: 0-100%
+        - 0% = muted (no remote audio)
+        - 50% = half volume
+        - 100% = maximum volume (default)
+
+        This volume control is independent from local sidetone volume
+        (audio.sidetone_volume_percent).
+
+        Volume adjustment is applied before audio codec to prevent
+        digital clipping.
+
+        Use cases:
+        - Balance remote vs local sidetone levels
+        - Reduce remote audio for monitoring without distraction
+        - Increase remote audio in noisy environments
+
+        Note: This parameter only affects remote audio stream.
+        Local sidetone volume is controlled separately via audio.volume.
+
+        Default: 100% (maximum, current behavior preserved)
+      examples:
+        - command: "remote stream_volume 100"
+          description: "Full volume (default)"
+        - command: "remote stream_volume 50"
+          description: "Half volume for background monitoring"
+        - command: "remote stream_volume 0"
+          description: "Mute remote audio (same as stream_audio=false)"
+
+  # ============================================================================
+  # STORED MESSAGES SUBSYSTEM - Keyboard morse code sending
+  # ============================================================================
+
+  - subsystem: messages
+    name: message1
+    nvs_key: msg_m1
+    field: stored_messages.message1
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F1"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F1"
+      long: |
+        Stored message F1 - typically used for CQ call.
+
+        Valid: 0-127 printable ASCII characters
+        Characters: A-Z, 0-9, punctuation, space
+
+        This message can be transmitted as morse code from the Web UI
+        or console commands using the text keyer.
+
+        Unsupported morse characters will be skipped during transmission.
+
+        Default: "CQ CQ CQ DE"
+      examples:
+        - command: "messages message1 \"CQ CQ CQ DE IU3QEZ\""
+          description: "CQ message with callsign"
+        - command: "messages message1 \"TEST DE IU3QEZ\""
+          description: "Test message"
+
+  - subsystem: messages
+    name: message2
+    nvs_key: msg_m2
+    field: stored_messages.message2
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F2"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F2"
+      long: |
+        Stored message F2 - typically used for test or exchange.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "TEST DE"
+      examples:
+        - command: "messages message2 \"599 001\""
+          description: "Contest exchange"
+
+  - subsystem: messages
+    name: message3
+    nvs_key: msg_m3
+    field: stored_messages.message3
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F3"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F3"
+      long: |
+        Stored message F3 - typically used for sign-off.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "TU 73"
+      examples:
+        - command: "messages message3 \"TU 73 GL\""
+          description: "Thanks, best regards, good luck"
+
+  - subsystem: messages
+    name: message4
+    nvs_key: msg_m4
+    field: stored_messages.message4
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F4"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F4"
+      long: |
+        Stored message F4 - typically used for query.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "QRZ?"
+      examples:
+        - command: "messages message4 \"QRZ?\""
+          description: "Who is calling?"
+
+  - subsystem: messages
+    name: message5
+    nvs_key: msg_m5
+    field: stored_messages.message5
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F5"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F5 (custom)"
+      long: |
+        Stored message F5 - custom message.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "" (empty)
+
+  - subsystem: messages
+    name: message6
+    nvs_key: msg_m6
+    field: stored_messages.message6
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F6"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F6 (custom)"
+      long: |
+        Stored message F6 - custom message.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "" (empty)
+
+  - subsystem: messages
+    name: message7
+    nvs_key: msg_m7
+    field: stored_messages.message7
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F7"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F7 (custom)"
+      long: |
+        Stored message F7 - custom message.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "" (empty)
+
+  - subsystem: messages
+    name: message8
+    nvs_key: msg_m8
+    field: stored_messages.message8
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F8"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F8 (custom)"
+      long: |
+        Stored message F8 - custom message.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "" (empty)
+
+  - subsystem: messages
+    name: message9
+    nvs_key: msg_m9
+    field: stored_messages.message9
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F9"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F9 (custom)"
+      long: |
+        Stored message F9 - custom message.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "" (empty)
+
+  - subsystem: messages
+    name: message10
+    nvs_key: msg_m10
+    field: stored_messages.message10
+    type: STRING
+    min: 0
+    max: 127
+    reset_required: false
+    category: normal
+    description: "Stored message F10"
+    unit: ""
+    validator: StringPrintableValidatorTag
+    help:
+      short: "Set text for stored message F10 (custom)"
+      long: |
+        Stored message F10 - custom message.
+
+        Valid: 0-127 printable ASCII characters
+        Default: "" (empty)
+
+  # ============================================================================
+  # REMOTE SERVER - CWNet Server for Receiving Remote Keying
+  # ============================================================================
+
+  - subsystem: server
+    name: enabled
+    nvs_key: server_en
+    field: server.enabled
+    type: BOOL
+    min: 0
+    max: 1
+    reset_required: false
+    category: normal
+    description: "Enable CWNet server"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Enable/disable CWNet server for receiving remote keying"
+      long: |
+        Controls whether the CWNet server is active for receiving keying from remote clients.
+
+        true (1): Server enabled
+        - Listens on server_listen_port for client connections
+        - Receives MORSE frames from remote client
+        - Controls local PTT and keying output
+        - Single client support only
+
+        false (0): Server disabled (default)
+        - Local keying only (no remote reception)
+
+        Typical use cases:
+        - P2P operation: Two ESP32 devices (one client, one server)
+        - Testing remote keying without external server
+        - Remote station transmitter (receives from internet client)
+
+        Default: false (disabled)
+      examples:
+        - command: "server enabled true"
+          description: "Enable CWNet server"
+        - command: "server enabled false"
+          description: "Disable server"
+
+  - subsystem: server
+    name: listen_port
+    nvs_key: server_port
+    field: server.listen_port
+    type: UINT16
+    min: 1
+    max: 65535
+    reset_required: false
+    category: normal
+    description: "Server TCP listen port"
+    unit: ""
+    validator: RangeValidatorTag
+    help:
+      short: "Set TCP port for CWNet server to listen on"
+      long: |
+        TCP port number for server to accept client connections.
+
+        Valid range: 1-65535
+
+        Standard CWNet port: 7355 (per DL4YHF protocol specification)
+
+        Use different port if running both client and server on same device
+        (e.g., client connects to 7355, server listens on 7356).
+
+        Default: 7355
+      examples:
+        - command: "server listen_port 7355"
+          description: "Standard CWNet port (default)"
+        - command: "server listen_port 7356"
+          description: "Alternative port (avoid conflict with client)"
+
+  - subsystem: server
+    name: ptt_tail_ms
+    nvs_key: server_ptt_t
+    field: server.ptt_tail_ms
+    type: UINT32
+    min: 0
+    max: 2000
+    reset_required: false
+    category: normal
+    description: "Server PTT tail delay"
+    unit: "ms"
+    validator: RangeValidatorTag
+    help:
+      short: "Set PTT tail delay for received keying in milliseconds"
+      long: |
+        PTT tail delay after last key-up event from remote client.
+
+        Valid range: 0-2000 milliseconds
+
+        PTT activates on first remote key-down and remains active for
+        ptt_tail_ms after last key-up from client.
+
+        This allows local transmitter to finish sending all received keying
+        before PTT releases.
+
+        Typical values:
+        - 200 ms: Default (per CWNet recommendations)
+        - 300-500 ms: Conservative for varying network conditions
+        - 100 ms: Aggressive for low-latency local networks
+
+        Note: This is server-side PTT for local TX output.
+        Client-side PTT is configured separately with remote.ptt_tail_ms.
+
+        Default: 200 ms
+      examples:
+        - command: "server ptt_tail_ms 200"
+          description: "Default 200 ms tail"
+        - command: "server ptt_tail_ms 300"
+          description: "Longer tail for reliability"
+        - command: "server ptt_tail_ms 100"
+          description: "Shorter tail for low-latency operation"

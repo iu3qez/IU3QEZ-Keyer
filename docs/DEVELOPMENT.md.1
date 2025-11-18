@@ -1,0 +1,498 @@
+### Notes on local development setup.
+
+## Local Development
+This section describes development environment setup and is maintained by the codex agent
+
+
+### Frontend
+
+
+### Backend
+
+### Firmware
+
+- Install ESP-IDF v5.4.1 (container default) and export the environment: `source $IDF_PATH/export.sh`.
+- Build the firmware: `idf.py build`.
+- Flash and monitor on the default port: `idf.py -p /dev/ttyUSB0 flash monitor`.
+- Hardware timing foundation (paddle HAL, high-precision clock, timeline buffer) is initialized during `app_main`. Paddle GPIO assignments default to the board pin map below and remain overridable through the `keyer` NVS namespace.
+- Default board pin map (configurable via NVS): DOT=GPIO3, DASH=GPIO4, KEY=GPIO5 (active-low with pull-up), NeoPixel WS2812 chain on GPIO38 (7 LEDs), I2C SDA=GPIO11, I2C SCL=GPIO10, I2S MCLK/BCLK/LRCK/DOUT on GPIO12/13/14/16 respectively.
+- Audio path is locked to the ES8311 external codec over I2S0 with I2C0 control; `sdkconfig.defaults` now forces IRAM-safe I2C/I2S ISRs to keep sidetone latency consistent during flash operations.
+- The sidetone service streams audio through a dedicated codec driver wrapper that double-buffers DMA writes into the ES8311, minimizing underruns during FreeRTOS scheduling jitter. Provide the codec's 7-bit address (0x18 default); the driver shifts to the 8-bit format required by the ESP codec library automatically.
+- Audio verification harness (Task 2.5): run `scripts/audio/generate_sidetone_wav.py --output sidetone.wav --analyze` to dump a reference WAV. The script mirrors firmware defaults (48 kHz, 600 Hz tone, 8 ms attack/release) and prints a single-bin DFT magnitude/SNR so humans can sanity-check envelopes or export the file to FFT tools (Audacity, Sonic Visualiser). Adjust frequency/duration/ADS(R) via CLI flags to match custom config snapshots.
+- USB console (`keying` namespace) lets you inspect/tune presets live: `keying status`, `keying preset V0|...|manual`, `keying wpm <value>`, `keying window <open> <close>` (auto-switches to manual), `keying late consider|forget`, `keying memory dit|dah on|off`, `keying latch edge|state`, `keying save`, `keying reload`.
+
+#### Parameter Metadata System
+
+The firmware uses a centralized **Parameter Metadata System** for type-safe parameter validation, console command handling, and Web UI auto-generation. All configuration parameters (audio, keying, network) are defined once with full metadata (type, range, units, description) and used across all interfaces.
+
+**Adding a New Parameter** (3-line pattern):
+
+```cpp
+// In components/config/parameter_registry.cpp, RegisterAllParameters() function:
+
+registry.Register(std::make_unique<IntParameter<0, 100>>(
+    "audio.volume",                    // Dot-notation name
+    "Sidetone volume",                 // Human-readable description
+    "%",                               // Unit (or "" if dimensionless)
+    [](const DeviceConfig& c) -> int32_t {
+      return c.audio.sidetone_volume_percent;
+    },
+    [](DeviceConfig& c, int32_t val) {
+      c.audio.sidetone_volume_percent = static_cast<uint8_t>(val);
+    }
+));
+```
+
+**Available Parameter Types**:
+- `IntParameter<MIN, MAX>`: Integer with compile-time bounds (widget: number_input)
+- `FloatParameter<PRECISION>`: Float with runtime range (widget: slider)
+- `EnumParameter<EnumType>`: Enum with value list (widget: dropdown)
+- `BooleanParameter`: Boolean with semantic names (widget: checkbox)
+
+**Conditional Visibility Example**:
+
+```cpp
+// Window parameters only visible when preset == MANUAL
+auto window_param = std::make_unique<FloatParameter<1>>(
+    "keying.window_open", "Memory window open", "%",
+    0.0f, 100.0f, getter, setter);
+
+window_param->SetVisibilityCondition([](const DeviceConfig& cfg) {
+  return cfg.keying.preset == KeyingPreset::kManual;
+});
+registry.Register(std::move(window_param));
+```
+
+**Benefits**:
+- **Single source of truth**: Parameter metadata defined once, used everywhere
+- **Type safety**: Compile-time bounds checking + runtime validation
+- **Auto-generated help**: `audio help` / `keying help` show ranges/types/current values
+- **Web UI ready**: `GET /api/config/schema` exports JSON with widget hints for form generation
+- **Eliminates duplication**: No manual parsing/validation in console commands (~120 lines removed)
+
+**JSON Schema Export** (for future Web UI):
+
+```cpp
+// In HTTP handler:
+std::string json = param_registry.ExportJsonSchema(device_config);
+// Returns JSON with widget hints, ranges, enum values, descriptions
+// Example: {"parameters":[{"name":"audio.freq","type":"int","widget":"number_input","min":100,"max":2000,...}]}
+```
+
+See [components/config/include/config/parameter_metadata.hpp](../components/config/include/config/parameter_metadata.hpp) for full API documentation and [components/config/parameter_registry.cpp](../components/config/parameter_registry.cpp) for registration examples.
+
+- Paddle visual feedback plan: first three NeoPixel LEDs yellow while DIT paddle active, next three yellow while DAH paddle active; final LED red until word gap completes, then green.
+- Boot sequence requirement: after a successful Wi-Fi connection, animate the NeoPixel chain to acknowledge readiness before entering steady-state indicators.
+- The TinyUSB CDC console component installs during boot; if the build environment lacks TinyUSB (e.g., IDF `latest` image), it falls back to a no-op logger. On IDF 5.4.1 use the dedicated USB port for configuration commands once exposed by the console layer.
+- Status LED controller now links against the `espressif/led_strip` RMT backend and drives the 7-LED WS2812 chain on GPIO38; if the component is removed it will fall back to simulation logs only.
+- Paddle engine defaults: 20 WPM, memory window opens at 60% of the element and closes at 99% (1% before completion), and held paddles during the intra-element gap schedule the next element by default. These parameters persist in NVS (`keying` section) and can be tuned later via console.
+- To override paddle pins before a console UI exists, instrument a temporary helper that calls `config::Storage::Save` with your wiring, or adjust the defaults in `config::DeviceConfig` as an interim measure.
+- Run host-side unit tests (HAL timing, paddle ISR dispatch, status LED controller, NVS storage, timeline buffer) with `./run_tests.sh` (requires CMake and Ninja on the host). The harness under `tests_host/` supplies lightweight ESP-IDF stubs so tests stay deterministic without hardware.
+
+#### Flash Procedure and USB Configuration
+
+**IMPORTANT: ESP32-S3 requires physical RESET button press after flashing.**
+
+The firmware uses TinyUSB CDC (USB OTG) for the interactive console interface. Due to USB enumeration behavior on ESP32-S3, the bootloader and application present as different USB devices to the host PC:
+- **Bootloader**: ESP32-S3 ROM download mode (for flashing)
+- **Application**: TinyUSB CDC ACM device (for console commands)
+
+After flashing completes, the host may not automatically re-enumerate the new USB device, causing the ESP32-S3 to appear "stuck" in download mode.
+
+**Correct Flash Procedure:**
+
+```bash
+# 1. Flash the firmware (auto-reset is DISABLED in sdkconfig.defaults)
+idf.py -p /dev/ttyUSB0 flash
+
+# 2. Wait for "Hard resetting via RTS pin..." message
+#    (esptool will attempt reset but it may not work with USB)
+
+# 3. Press the physical RESET button on the board
+#    This ensures clean application startup and USB re-enumeration
+
+# 4. Connect to USB console (example with screen)
+screen /dev/ttyACM0 115200
+```
+
+**USB and Logging Configuration:**
+
+The firmware uses a dual-console setup to separate system diagnostics from user interaction:
+
+1. **UART0 (System Logs)**
+   - ESP-IDF system logs (`ESP_LOGI`, `ESP_LOGW`, `ESP_LOGE`, etc.)
+   - Default pins: TX=GPIO43, RX=GPIO44 (ESP32-S3 hardware defaults)
+   - Baud rate: 115200
+   - Connect via: `/dev/ttyUSB0` or similar (UART-to-USB adapter required)
+   - Use for: Build output monitoring with `idf.py monitor`
+
+2. **TinyUSB CDC (User Console)**
+   - Interactive command interface (keying, audio, status)
+   - Vendor ID: 0x303A (Espressif), Product ID: 0x4001
+   - Device name: "Espressif CDC Device"
+   - Connect via: `/dev/ttyACM0` or similar (appears after USB enumeration)
+   - Use for: Configuration commands documented in [CONSOLE.md](CONSOLE.md)
+
+**Why Auto-Reset is Disabled:**
+
+The `sdkconfig.defaults` sets `CONFIG_ESPTOOLPY_AFTER_NORESET=y` to prevent esptool from attempting automatic reset after flash. This is because:
+- USB enumeration conflicts between bootloader and application
+- RTS/DTR reset signals unreliable with USB CDC devices
+- Physical reset button provides cleaner state transition
+
+**USB Serial JTAG:**
+
+The secondary USB Serial JTAG console is **disabled** (`CONFIG_ESP_CONSOLE_SECONDARY_NONE=y`) to prevent additional USB enumeration conflicts. All system logs go exclusively to UART0.
+
+**Troubleshooting:**
+
+- **"Device stuck in download mode"**: Press RESET button after flash completes
+- **"No /dev/ttyACM0 device"**: Check USB cable, try different port, verify board powered
+- **"Console not responding"**: Ensure connected to correct port (`/dev/ttyACM0`, not `/dev/ttyUSB0`)
+- **"System logs not visible"**: Connect UART adapter to GPIO43/44, use `idf.py monitor`
+
+#### Iambic Mode Specification (Task 3.1)
+
+Preset codes (V0–V9) follow the PRD requirements so firmware, console, and documentation stay aligned:
+
+| Preset | Heritage            | Memory variant      | Behaviour notes |
+|--------|---------------------|---------------------|-----------------|
+| V0     | Super Keyer II / III | Dot & dash memory   | Timing parameters TBD (spec placeholders; to be captured once original keyers are characterised). |
+| V1     | Super Keyer II / III | Dot memory only     | As above, dash memory disabled; full timing still pending. |
+| V2     | Super Keyer II / III | Dash memory only    | Dot memory disabled; timing TBD. |
+| V3     | Accukeyer            | Dot & dash memory   | **State-latch**: if the opposite paddle stays pressed past the latch threshold during an element, schedule the alternating element when the gap opens. |
+| V4     | Accukeyer            | Dot memory only     | State-latch behaviour with dash memory disabled. |
+| V5     | Accukeyer            | Dash memory only    | State-latch behaviour with dot memory disabled. |
+| V6     | Curtis "A"           | Dot & dash memory   | **Edge-trigger**: memory is set on the opposite paddle's press edge; no long latch is retained after release. |
+| V7     | Curtis "A"           | Dot memory only     | Edge-trigger with dash memory disabled. |
+| V8     | Curtis "A"           | Dash memory only    | Edge-trigger with dot memory disabled. |
+| V9     | Generic Iambic       | No memory           | Pure iambic timing with dot/dash memory disabled. |
+
+Manual preset (exposed alongside V0–V9) lets the operator override window percentages, late-release handling, dot/dash memory enablement, and latch mode (edge vs state) directly once configuration interfaces (Task 3.4) land.
+
+Additional rules:
+- **State-latch (Accukeyer family)** – Holding the opposite paddle beyond the configured threshold inside the element guarantees an alternating element once the current one finishes.
+- **Edge-trigger (Curtis "A" family)** – Memory fires strictly on the transition from open→pressed; releasing before the gap clears drops the queued element.
+- **Generic window** – For profiles that use an aperture, the latch is valid only inside the configured window (percentages of *dash* duration). Outside the window, presses are ignored.
+- **Late release handling** – Independent of the preset. Two options exist: `consider` repeats the element even when the paddle is released during the intra-element gap (useful if you "doze" on the key); `forget` queues the element but drops it as soon as the paddle comes up before the gap ends. Selecting the manual preset exposes this toggle directly; other presets choose the appropriate default.
+
+Current firmware defaults still use the generic 60 % → 99 % aperture with both memories active and hold propagation enabled; as the historical timing data for V0–V2 is captured we will update the table with concrete percentages and gap handling. Tasks 3.4/3.5 will expose preset selection and window tuning through the console/UI, while Task 3.6 will extend host tests to cover each preset family.
+
+#### Initialization Sequence and Error Handling (Task 9.1)
+
+The firmware follows a **strict initialization sequence** designed to fail-fast on critical errors and prevent undefined behavior. This ensures the device never enters the main loop with partially initialized subsystems.
+
+**Initialization Order:**
+
+1. **NVS Flash** (CRITICAL)
+   - Required for all persistent storage operations
+   - Failure behavior: `ESP_ERROR_CHECK()` triggers immediate abort with coredump
+   - Recovery: `idf.py erase-flash` to reset NVS partition
+
+2. **High-Precision Clock** (CRITICAL)
+   - Provides microsecond-resolution timestamps for timeline and keying
+   - Failure behavior: `ESP_ERROR_CHECK()` triggers immediate abort
+   - Indicates hardware timer unavailable (serious HW fault)
+
+3. **Configuration Storage** (CRITICAL)
+   - Loads keying parameters, pin mappings, audio settings from NVS
+   - Failure behavior: `FatalInitError()` displays diagnostic banner and aborts
+   - Causes:
+     * Corrupted NVS partition (try `idf.py erase-flash`)
+     * Invalid configuration schema in storage
+     * Flash hardware fault
+   - **Design decision**: Without config, device doesn't know GPIO pins or operational parameters → cannot function safely
+
+4. **Paddle HAL** (CRITICAL)
+   - Registers GPIO interrupts for dit/dah/key lines
+   - Failure behavior: `FatalInitError()` if initialization fails
+   - **Exception**: Missing pin configuration (GPIO = -1) is a WARNING, not fatal
+     * Device can still boot for configuration via console
+     * Operator must configure pins via NVS before keying works
+   - Causes of fatal failure:
+     * GPIO registration failed (pins in use, invalid numbers)
+     * ISR allocation failed (interrupt table full)
+     * Invalid hardware state
+
+5. **Status LED** (NON-CRITICAL)
+   - Initializes WS2812 NeoPixel chain for visual feedback
+   - Failure behavior: Warning logged, device continues with degraded functionality
+   - Missing LED does not prevent core keying operation
+
+6. **USB Console** (NON-CRITICAL)
+   - Enables TinyUSB CDC interface for configuration commands
+   - Failure behavior: Warning logged, device continues
+   - Alternative: UART console remains available
+
+7. **Paddle Engine** (CRITICAL)
+   - Initializes iambic state machine with validated configuration
+   - Failure behavior: `FatalInitError()` triggers abort
+   - **Design decision**: Core keying logic cannot be bypassed
+   - At this point config is validated, so failure indicates logic error
+   - Requires firmware debugging to resolve
+
+8. **Sidetone Service** (NON-CRITICAL)
+   - Initializes audio codec, I2S, I2C for sidetone output
+   - Failure behavior: Warning logged, `g_sidetone_initialized = false`
+   - Device operates without audio feedback (silent mode)
+   - Causes: I2C communication fault, codec not responding, I2S resource conflict
+
+**Fatal Error Behavior:**
+
+When a CRITICAL subsystem fails, the `FatalInitError()` helper executes:
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║              FATAL INITIALIZATION FAILURE                      ║
+╠════════════════════════════════════════════════════════════════╣
+║ Subsystem: Configuration Storage                              ║
+║ Error:     ESP_ERR_NVS_CORRUPT                                ║
+║ Code:      0x1105                                             ║
+╠════════════════════════════════════════════════════════════════╣
+║ The device cannot continue with this critical failure.         ║
+║ Possible causes:                                               ║
+║  - Corrupted NVS flash (try: idf.py erase-flash)              ║
+║  - Hardware fault (GPIO, I2C, flash)                          ║
+║  - Invalid configuration in storage                            ║
+╠════════════════════════════════════════════════════════════════╣
+║ System will abort in 2 seconds to trigger coredump...         ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+**Visual Indication:**
+- If Status LED initialized before failure: Rapid pulsing for 2 seconds
+- Planned enhancement (Task 8.1): Solid RED pattern for fatal errors
+
+**Post-Abort Behavior:**
+- ESP-IDF panic handler captures coredump to flash (if configured in `sdkconfig`)
+- Register dump and stack backtrace printed to console
+- Device halts (requires power cycle or reset button)
+- Coredump analysis: `idf.py coredump-info` or `idf.py coredump-debug`
+
+**Debugging Init Failures:**
+
+1. **Read the diagnostic banner** - Error code and subsystem name indicate root cause
+2. **Check serial output** - Earlier init steps may have warnings
+3. **Try flash erase** - Many issues resolved by `idf.py erase-flash && idf.py flash`
+4. **Verify wiring** - GPIO conflicts or disconnected hardware
+
+---
+
+#### Watchdog Management (Task 9.4)
+
+**Purpose:**
+Detect and recover from main loop hangs caused by infinite loops, deadlocks, or blocking operations. The task watchdog timer monitors the main application loop and triggers a panic if the loop stops making progress.
+
+**Configuration:**
+- **Timeout**: 500ms (500x the nominal main loop period of 1ms)
+- **Trigger**: Panic on timeout (enables coredump capture for post-mortem analysis)
+- **Monitored task**: Main task running `ApplicationController::Run()`
+- **Location**: [application_controller.cpp:201-229](components/app/application_controller.cpp#L201-L229)
+
+**Rationale for 500ms timeout:**
+- Main loop nominal cycle: 1ms (1000 Hz)
+- Worst-case execution paths:
+  * `DrainPaddleEvents()`: Burst processing of queued paddle events (up to 32 events at ~50 WPM ≈ 160ms worst case)
+  * `usb_console_.Poll()`: USB stack delays during enumeration/reset (up to 100ms)
+  * `diagnostics_subsystem_.Tick()`: LED DMA operations (typically <5ms)
+  * `keying_subsystem_.Tick()`: Keying engine state machine (deterministic, <1ms)
+- Safety margin: 500ms = 500x nominal allows for transient USB delays + paddle event bursts without false positives
+
+**Main Loop Watchdog Reset:**
+```cpp
+void ApplicationController::Run() {
+  while (true) {
+    keying_subsystem_.DrainPaddleEvents();
+    keying_subsystem_.Tick(now_us);
+    diagnostics_subsystem_.Tick();
+    usb_console_.Poll();
+
+    esp_task_wdt_reset();  // Signal "still alive" to watchdog
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+```
+
+**Failure Scenarios Detected:**
+1. **Infinite loop** in any subsystem Tick() method → watchdog expires → panic
+2. **Deadlock** on shared resource (e.g., spinlock not released) → watchdog expires → panic
+3. **Blocking I/O** that stalls indefinitely (e.g., I2C timeout misconfigured) → watchdog expires → panic
+
+**Panic Handler Behavior:**
+When watchdog expires (no `esp_task_wdt_reset()` called within 500ms):
+1. ESP-IDF panic handler captures register dump and stack backtrace
+2. Coredump written to flash (if `CONFIG_ESP_COREDUMP_ENABLE` set)
+3. System reboots automatically after panic delay (configurable via sdkconfig)
+4. On reboot: `FatalInitError()` does NOT trigger (watchdog reset is transient, not persistent)
+5. **Diagnostic log** on next boot: Check `esp_reset_reason()` for `ESP_RST_TASK_WDT`
+
+**Debugging Watchdog Timeouts:**
+1. **Capture serial output** - Watchdog panic includes task name and stack trace
+2. **Analyze coredump**: `idf.py coredump-info` shows where loop was stuck
+3. **Check for blocking calls**:
+   - Search for long-running loops without yield points
+   - Verify no unbounded `while()` loops in subsystem Tick() methods
+   - Check I2C/I2S timeout parameters (should be << 500ms)
+4. **Increase timeout temporarily** (for debugging only):
+   - Modify `kWatchdogTimeoutMs` in [application_controller.cpp:21](components/app/application_controller.cpp#L21)
+   - Recompile and flash
+   - **Do not commit increased timeout** - defeats the purpose of watchdog
+
+**Recovery Strategy:**
+- Watchdog timeout triggers **automatic reboot** (no manual intervention required)
+- Persistent hangs require firmware fix (watchdog identifies the bug location via stack trace)
+- Transient hangs (e.g., USB enumeration glitch) self-recover on next boot
+
+**Testing Watchdog:**
+To verify watchdog is working, inject a deliberate infinite loop:
+```cpp
+// TEMPORARY TEST CODE - DO NOT COMMIT
+void ApplicationController::Run() {
+  ESP_LOGI(kLogTag, "Entering main loop");
+  while (true) {
+    // Comment out esp_task_wdt_reset() to trigger watchdog
+    // esp_task_wdt_reset();
+    vTaskDelay(pdMS_TO_TICKS(kMainLoopDelayMs));
+  }
+}
+```
+Expected result: Panic after 500ms with message "Task watchdog got triggered".
+
+---
+5. **Analyze coredump** - Use `idf.py coredump-debug build/keyer.elf` to inspect stack
+6. **Enable verbose logging** - Set `CONFIG_LOG_DEFAULT_LEVEL_VERBOSE` in `sdkconfig`
+
+**Recovery from Fatal Errors:**
+
+| Error Scenario | Recovery Steps |
+|----------------|----------------|
+| `ESP_ERR_NVS_CORRUPT` | Run `idf.py erase-flash` to reset NVS partition, then reflash firmware |
+| `ESP_ERR_INVALID_ARG` | Check pin configuration in NVS or firmware defaults - GPIO numbers out of range |
+| `ESP_ERR_NO_MEM` | Increase heap size in `sdkconfig` or check for memory leaks in other tasks |
+| Paddle HAL failure | Verify GPIO pins not in use by other peripherals (I2C, I2S, etc.) |
+| Paddle Engine failure | Check keying config values - speed/window percentages may be invalid |
+
+**Testing Init Failures:**
+
+To verify failfast behavior works correctly:
+
+```bash
+# Corrupt NVS to trigger config storage failure
+idf.py partition-table  # Note NVS partition address
+esptool.py --port /dev/ttyUSB0 erase_region 0x9000 0x6000  # Erase NVS
+
+# Flash and monitor - should see FatalInitError banner
+idf.py flash monitor
+```
+
+Expected output: Diagnostic banner, 2-second delay, abort with backtrace.
+
+**Design Rationale:**
+
+The **fail-fast approach** prevents subtle bugs from corrupted state:
+- Silent failures in init → undefined behavior in main loop → hard-to-debug crashes
+- Failfast errors → immediate diagnostic → clear recovery path
+- Critical subsystems identified explicitly → maintainability
+
+Non-critical subsystems (LED, sidetone, console) use **graceful degradation**:
+- Device remains functional for core keying task
+- Operator gets warnings but can still send CW
+- Reduces false-positive failures from optional peripherals
+
+#### Paddle Event Queue Implementation (Task 9.2)
+
+The firmware uses a **FreeRTOS queue** for ISR-to-task communication of paddle events, replacing the previous manual circular buffer implementation to eliminate race conditions.
+
+**Queue Design:**
+
+- **Capacity**: 64 events (configured via `kPaddleEventQueueCapacity`)
+  * Sized for worst-case burst: 100 WPM ≈ 33 events/sec → 64 slots gives ~2 second buffer
+  * Prevents overflow during transient ISR bursts or scheduling delays
+- **Item type**: `hal::PaddleEvent` structure (GPIO line, active state, timestamp)
+- **Initialization**: Created in `app_main` before paddle HAL init (queue must exist before ISR registration)
+- **Thread-safety**: FreeRTOS queue API handles all synchronization internally
+
+**Producer (ISR context):**
+
+```cpp
+void IRAM_ATTR EnqueuePaddleEvent(const hal::PaddleEvent& event) {
+    BaseType_t higher_priority_task_woken = pdFALSE;
+
+    if (xQueueSendFromISR(g_paddle_event_queue, &event, &higher_priority_task_woken) != pdPASS) {
+        g_paddle_event_dropped.fetch_add(1, std::memory_order_relaxed);  // Atomic increment
+    }
+
+    portYIELD_FROM_ISR(higher_priority_task_woken);  // Immediate yield if needed
+}
+```
+
+**Key features**:
+- `xQueueSendFromISR` is ISR-safe (no race conditions vs consumer)
+- Dropped events tracked via `std::atomic<size_t>` for lock-free increment
+- `portYIELD_FROM_ISR` ensures low latency for dequeue task
+
+**Consumer (task context):**
+
+```cpp
+bool DequeuePaddleEvent(hal::PaddleEvent* out_event) {
+    return xQueueReceive(g_paddle_event_queue, out_event, 0) == pdTRUE;  // Non-blocking poll
+}
+```
+
+Called from `DrainDeferredPaddleEvents()` in main loop (1ms period, 1000 Hz).
+
+**Monitoring:**
+
+Console command `queue` provides real-time diagnostics:
+
+```
+> queue
+QUEUE waiting=0 available=64 capacity=64 usage=0.0% dropped=0
+```
+
+Fields:
+- `waiting`: Events currently in queue
+- `available`: Free slots
+- `usage`: Percentage of capacity used
+- `dropped`: Total events lost due to queue full (since boot)
+
+If `dropped > 0`, indicates queue overflow - either:
+1. Main loop blocked for >2 seconds (investigate watchdog, long operations)
+2. Event rate exceeds design limit (>33 events/sec sustained)
+3. Queue capacity too small (increase `kPaddleEventQueueCapacity`)
+
+**Advantages over manual circular buffer:**
+
+| Aspect | Manual Buffer (old) | FreeRTOS Queue (new) |
+|--------|---------------------|----------------------|
+| **ISR safety** | ⚠️ Mixed `portENTER_CRITICAL` and `portENTER_CRITICAL_ISR` → deadlock risk | ✅ `xQueueSendFromISR` guarantees ISR-safe synchronization |
+| **Memory barriers** | ⚠️ Struct copy without explicit barriers | ✅ Queue API handles memory ordering internally |
+| **Dropped counter** | ⚠️ Volatile increment (not guaranteed atomic) | ✅ `std::atomic` with relaxed ordering |
+| **Maintainability** | ⚠️ 30 lines custom lock-free code | ✅ 10 lines using proven FreeRTOS primitives |
+| **Testing** | ⚠️ Difficult to verify correctness | ✅ FreeRTOS extensively tested across platforms |
+
+**Performance:**
+
+- Queue overhead: ~12 bytes per slot (64 slots × 12 = 768 bytes)
+- ISR latency: `xQueueSendFromISR` typically <1 µs on ESP32-S3
+- No observable impact on paddle timing resolution (<50 µs requirement)
+
+**Failure modes:**
+
+- **Queue creation failure**: Triggers `FatalInitError` (no memory available - serious)
+- **Queue full**: Events dropped, counter incremented, warning in `queue` command
+- **Queue not initialized**: Console command returns `ERR queue not initialized`
+
+**Testing recommendations:**
+
+1. **Normal operation**: Monitor `queue` command during use - `waiting` should stay <10, `dropped` should be 0
+2. **Stress test**: Rapid paddle flutter at 100 WPM - `usage` may spike to 20-30% but should recover
+3. **Long-term**: Check `dropped` after hours of operation - should remain 0
+4. **Blocked loop**: Intentionally delay main loop (add long `vTaskDelay`) - should see dropped events
+
+**Future enhancements (Task 9.2.4):**
+
+- Unit test with simulated ISR flood (inject events faster than consumer)
+- Automatic queue resize if dropped events exceed threshold
+- Telemetry export of queue metrics via web UI
+

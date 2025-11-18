@@ -1,0 +1,28 @@
+idf_component_register(
+    SRCS
+        "application_controller.cpp"
+        "usb_early_init.cpp"
+        "init_pipeline.cpp"
+        "init_phases.cpp"
+        "bootloader_entry.cpp"
+        "boot_failure_tracker.cpp"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        nvs_flash
+        freertos
+        driver
+        esp_common
+        app_update
+        config
+        keyer_hal
+        keying_subsystem
+        diagnostics_subsystem
+        audio_subsystem
+        wifi_subsystem
+        remote
+        ui
+        text_keyer
+        captive_portal
+        espressif__esp_tinyusb
+)

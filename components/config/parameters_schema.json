@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://iu3qez.github.io/qrshst-keyer/parameters-schema.json",
+  "title": "QRS2HST Keyer Parameter Metadata Schema",
+  "description": "Validates the structure of parameters.yaml for code generation",
+  "type": "object",
+  "required": ["parameters"],
+  "properties": {
+    "parameters": {
+      "type": "array",
+      "description": "Array of device configuration parameters",
+      "items": {
+        "$ref": "#/definitions/parameter"
+      },
+      "minItems": 1
+    }
+  },
+  "definitions": {
+    "parameter": {
+      "type": "object",
+      "required": [
+        "subsystem",
+        "name",
+        "nvs_key",
+        "field",
+        "type",
+        "reset_required",
+        "description",
+        "unit",
+        "validator"
+      ],
+      "properties": {
+        "subsystem": {
+          "type": "string",
+          "enum": ["audio", "keying", "hardware", "wifi", "general", "remote", "server", "messages"],
+          "description": "Subsystem name for grouping"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Parameter short name (lowercase, snake_case)"
+        },
+        "nvs_key": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]{1,15}$",
+          "description": "NVS storage key (max 15 chars, lowercase, underscores)"
+        },
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_.]*$",
+          "description": "DeviceConfig field path (e.g., 'audio.sidetone_frequency_hz')"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["INT32", "UINT32", "UINT16", "UINT8", "INT8", "BOOL", "STRING", "FLOAT", "ENUM"],
+          "description": "Parameter data type"
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum value (required for numeric types)"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum value (required for numeric types)"
+        },
+        "enum_type": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9]*$",
+          "description": "C++ enum class name (required for ENUM type)"
+        },
+        "values": {
+          "type": "array",
+          "description": "Allowed enum values (required for ENUM type)",
+          "items": {
+            "$ref": "#/definitions/enum_value"
+          },
+          "minItems": 1
+        },
+        "reset_required": {
+          "type": "boolean",
+          "description": "True if changing this parameter requires device reboot"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short one-line description"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit string (e.g., 'Hz', 'WPM', '%', '' for none)"
+        },
+        "validator": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9]*Tag$",
+          "description": "Validator tag name (e.g., 'RangeValidatorTag')"
+        },
+        "help": {
+          "$ref": "#/definitions/help_text",
+          "description": "Help text for console and Web UI"
+        },
+        "visibility_condition": {
+          "type": "string",
+          "description": "Optional lambda expression for conditional visibility"
+        },
+        "widget_hint": {
+          "type": "string",
+          "description": "Optional Web UI widget type override"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["INT32", "UINT32", "UINT16", "UINT8", "INT8", "FLOAT"]
+              }
+            }
+          },
+          "then": {
+            "required": ["min", "max"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "ENUM"
+              }
+            }
+          },
+          "then": {
+            "required": ["enum_type", "values"]
+          }
+        }
+      ]
+    },
+    "enum_value": {
+      "type": "object",
+      "required": ["name", "value", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$",
+          "description": "User-facing enum value name (UPPER_CASE)"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^k[A-Z][A-Za-z0-9]*$",
+          "description": "C++ enum constant name (kPascalCase)"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable description for Web UI"
+        }
+      }
+    },
+    "help_text": {
+      "type": "object",
+      "required": ["short"],
+      "properties": {
+        "short": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "One-line help text for parameter lists"
+        },
+        "long": {
+          "type": "string",
+          "description": "Detailed multi-line explanation"
+        },
+        "examples": {
+          "type": "array",
+          "description": "Usage examples",
+          "items": {
+            "$ref": "#/definitions/help_example"
+          }
+        }
+      }
+    },
+    "help_example": {
+      "type": "object",
+      "required": ["command", "description"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Example command (copy-paste ready)"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Explanation of what the command does"
+        }
+      }
+    }
+  }
+}

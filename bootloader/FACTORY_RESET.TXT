@@ -1,0 +1,25 @@
+FACTORY RESET TRIGGER
+=====================
+
+DELETE THIS FILE TO RESET DEVICE TO FACTORY DEFAULTS
+
+WARNING: This action will:
+- Erase all configuration (NVS partition)
+- Reset WiFi credentials
+- Reset all keyer settings
+- Restart device with factory defaults
+
+Configuration that will be lost:
+- WiFi SSID and password
+- Keyer parameters (speed, mode, paddle config)
+- Audio settings (sidetone frequency, volume)
+- Hardware settings (GPIO assignments)
+- All user preferences
+
+HOW TO USE:
+1. Delete this file from the drive
+2. Device will detect deletion
+3. NVS partition will be erased
+4. Device restarts with factory defaults
+
+DO NOT delete this file unless you want to reset!
