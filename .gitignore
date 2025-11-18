@@ -1,0 +1,47 @@
+s.DS_Store
+venv/
+__pycache__/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+backend/data/
+.persistenza/
+.devcontainer-data/
+build/*
+main/build/
+*.pyc
+npm-debug.log*
+.env
+
+backend/uploads/
+tests/host/build/
+tests_host/build
+tests_host/build_*/
+tests_host/test_classifier_standalone/
+tests_host/CMakeLists_classifier.txt
+managed_components/
+unity-app/
+tmp/
+tests/
+docs_doxygen/
+Doxyfile
+doxygen_*
+*.bak
+sdkconfig
+
+# Host test coverage files (generated with HOST_TEST_COVERAGE=ON)
+*.gcda
+*.gcno
+*.gcov
+tests_host/coverage/
+# WiFi secrets for development (Task 5.4.0.8)
+components/config/include/config/wifi_secrets.h
+
+# Generated parameter files (Feature 4 - Task 4.3)
+# DO NOT commit these - they are auto-generated from parameters.yaml
+components/config/include/config/parameter_table.hpp
+components/config/parameter_registry_generated.cpp
+components/ui/generated/
+
+.vscode/settings.json
+

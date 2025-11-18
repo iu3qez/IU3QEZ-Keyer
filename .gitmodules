@@ -1,0 +1,3 @@
+[submodule "bootloader/tinyuf2"]
+	path = bootloader/tinyuf2
+	url = https://github.com/adafruit/tinyuf2.git
